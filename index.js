@@ -25,9 +25,20 @@ async function run() {
     try {
         // DB bistro-restaurant
         const database = client.db('bistro-restaurant');
+        const usersCollection = database.collection('users');
         const menusCollection = database.collection('menus');
         const reviewsCollection = database.collection('reviews');
         const cartsCollection = database.collection('carts');
+
+
+        // save user data 
+        app.post('/users', async (req, res) => {
+            const user = req.body;
+            console.log(user);
+            const result = await usersCollection.insertOne(user)
+            res.send(result)
+        })
+
 
         // get the all menus data in DB
         app.get('/menus', async (req, res) => {
