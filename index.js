@@ -48,13 +48,16 @@ async function run() {
 
         // middleware verifyToken
         const verifyAdmin = async (req, res, next) => {
-            const decodedEmail = req.decoded.email;
-            const query = { email: decodedEmail }
+            // const decodedEmail = req.decoded.email;
+            console.log(req.decoded.email);
+            const query = { email: req.decoded.email }
             const user = await usersCollection.findOne(query)
             const isAdmin = user?.role === 'admin';
             if (!isAdmin) {
                 return res.status(403).send({ message: 'forbidden access' });
+
             }
+            next()
         }
 
 
@@ -70,7 +73,7 @@ async function run() {
         app.post('/users', async (req, res) => {
             const user = req.body;
             const query = { email: user.email }
-            console.log(user, query);
+            // console.log(user, query);
             const alreadyExist = await usersCollection.findOne(query);
             if (alreadyExist) {
                 return res.send({ message: 'User already exist..!' })
@@ -83,7 +86,7 @@ async function run() {
             const result = await usersCollection.find().toArray()
             res.send(result)
         });
-        app.delete('/users/:id', verifyAdmin, async (req, res) => {
+        app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
             const userId = req.params.id;
             const filter = { _id: new ObjectId(userId) }
             const result = await usersCollection.deleteOne(filter);
@@ -105,9 +108,7 @@ async function run() {
         // check admin 
         app.get('/users/admin/:email', verifyToken, verifyAdmin, async (req, res) => {
             const email = req.params.email;
-            const decodedEmail = req?.decoded?.email;
-
-            if (email !== decodedEmail) {
+            if (email !== req.decoded.email) {
                 return res.status(403).send({ message: 'unauthorized access' });
             }
             const query = { email: email }
@@ -124,11 +125,34 @@ async function run() {
         app.get('/menus', async (req, res) => {
             const result = await menusCollection.find().toArray()
             res.send(result)
+        });
+
+        app.post('/menus', verifyToken, verifyAdmin, async (req, res) => {
+            const menuInfo = req.body;
+            // console.log(menuInfo);
+            const result = await menusCollection.insertOne(menuInfo);
+            res.send(result)
+        });
+        app.delete('/menus/:id', verifyToken, verifyAdmin, async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await menusCollection.deleteOne(query);
+            res.send(result)
         })
+
+
+
+
+
+        // review related apis 
         app.get('/reviews', async (req, res) => {
             const result = await reviewsCollection.find().toArray()
             res.send(result)
         })
+
+
+
+
 
         // add to the cart 
         app.post('/carts', async (req, res) => {
