@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const app = express()
 const jwt = require('jsonwebtoken');
+const stripe = require('stripe')('sk_test_51QfP2KQTZ65dHD6JNijXUm4DkrdfZ5wRqUIIzYt2qy6W6FhGDh5HhnsHzXb7hEEVeNRFz7Ied8sATtIOcP9bNtH800oGODJKOx')
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const port = process.env.PORT || 5000;
@@ -30,6 +31,7 @@ async function run() {
         const menusCollection = database.collection('menus');
         const reviewsCollection = database.collection('reviews');
         const cartsCollection = database.collection('carts');
+        const paymentsCollection = database.collection('payments');
 
         // middleware verifyToken
         const verifyToken = (req, res, next) => {
@@ -106,7 +108,7 @@ async function run() {
         })
 
         // check admin 
-        app.get('/users/admin/:email', verifyToken, verifyAdmin, async (req, res) => {
+        app.get('/users/admin/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             if (email !== req.decoded.email) {
                 return res.status(403).send({ message: 'unauthorized access' });
@@ -126,6 +128,31 @@ async function run() {
             const result = await menusCollection.find().toArray()
             res.send(result)
         });
+
+        app.get('/menus/:id', async (req, res) => {
+            const id = req.params.id;
+            console.log(id);
+            const query = { _id: new ObjectId(id) }
+            const result = await menusCollection.findOne(query);
+            res.send(result)
+        })
+
+        app.patch('/menus/:id', async (req, res) => {
+            const id = req.params.id;
+            const updatedInfo = req.body;
+            const filter = { _id: new ObjectId(id) }
+            const updatedDoc = {
+                $set: {
+                    name: updatedInfo.name,
+                    price: updatedInfo.price,
+                    recipe: updatedInfo.recipe,
+                    category: updatedInfo.category,
+                    image: updatedInfo.image,
+                }
+            }
+            const result = await menusCollection.updateOne(filter, updatedDoc)
+            res.send(result)
+        })
 
         app.post('/menus', verifyToken, verifyAdmin, async (req, res) => {
             const menuInfo = req.body;
@@ -171,6 +198,43 @@ async function run() {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const result = await cartsCollection.deleteOne(query);
+            res.send(result)
+        })
+
+        // Payment intent related apis
+        app.post('/create-payment-intent', async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100);
+            const paymentIntent = await stripe.paymentIntents.create({
+                amount: amount,
+                currency: 'usd',
+                payment_method_types: ['card']
+            })
+            res.send({
+                clientSecret: paymentIntent?.client_secret
+            })
+        })
+
+        app.post('/payments', async (req, res) => {
+            const paymentInfo = req.body;
+            const paymentResult = await paymentsCollection.insertOne(paymentInfo);
+            // DONE: remove payment Cart items
+            const query = {
+                _id: {
+                    $in: paymentInfo.cartIds.map(cartId => new ObjectId(cartId))
+                }
+            }
+            const cartRemoveResult = await cartsCollection.deleteMany(query);
+            res.send({ paymentResult, cartRemoveResult })
+        })
+        app.get('/payments/:email', verifyToken, async (req, res) => {
+            const email = req.params.email;
+            const decodedEmail = req.decoded.email;
+            if (decodedEmail !== email) {
+                return res.status(403).send({ message: 'forbidden access' })
+            }
+            const query = { email: email }
+            const result = await paymentsCollection.find(query).toArray()
             res.send(result)
         })
 
