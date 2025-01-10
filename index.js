@@ -227,6 +227,7 @@ async function run() {
             const cartRemoveResult = await cartsCollection.deleteMany(query);
             res.send({ paymentResult, cartRemoveResult })
         })
+
         app.get('/payments/:email', verifyToken, async (req, res) => {
             const email = req.params.email;
             const decodedEmail = req.decoded.email;
@@ -238,6 +239,36 @@ async function run() {
             res.send(result)
         })
 
+
+        // Admin Dashboard related  apis 
+        app.get('/admin-dashboard', async (req, res) => {
+            const totalCustomer = await usersCollection.estimatedDocumentCount();
+            const totalMenuItems = await menusCollection.estimatedDocumentCount();
+            const totalOrder = await paymentsCollection.estimatedDocumentCount();
+
+            // bad way to .....collection  sum value 
+            // const totalPrice = await menusCollection.find().toArray()
+            // const result = totalPrice.reduce((total, menu) => total + menu.price, 0)
+
+            // better wye  
+            const totalPrice = [
+                {
+                    $group: {
+                        _id: null,
+                        total: { $sum: "$price" },
+                    },
+                },
+            ];
+            const totalPriceResult = await menusCollection.aggregate(totalPrice).toArray()
+            const total = totalPriceResult.length > 0 ? totalPriceResult[1].total : 0;
+            res.send({
+                totalCustomer,
+                totalMenuItems,
+                totalOrder,
+                // result,
+                total
+            })
+        })
 
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
