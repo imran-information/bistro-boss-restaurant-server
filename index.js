@@ -241,7 +241,7 @@ async function run() {
 
 
         // Admin Dashboard related  apis 
-        app.get('/admin-dashboard', async (req, res) => {
+        app.get('/admin-dashboard', verifyToken, verifyAdmin, async (req, res) => {
             const totalCustomer = await usersCollection.estimatedDocumentCount();
             const totalMenuItems = await menusCollection.estimatedDocumentCount();
             const totalOrder = await paymentsCollection.estimatedDocumentCount();
@@ -251,16 +251,16 @@ async function run() {
             // const result = totalPrice.reduce((total, menu) => total + menu.price, 0)
 
             // better wye  
-            const totalPrice = [
+            const totalPrice = await menusCollection.aggregate([
                 {
                     $group: {
                         _id: null,
                         total: { $sum: "$price" },
                     },
                 },
-            ];
-            const totalPriceResult = await menusCollection.aggregate(totalPrice).toArray()
-            const total = totalPriceResult.length > 0 ? totalPriceResult[1].total : 0;
+            ]).toArray()
+
+            const total = totalPrice.length > 0 ? totalPrice[0].total : 0;
             res.send({
                 totalCustomer,
                 totalMenuItems,
@@ -268,7 +268,44 @@ async function run() {
                 // result,
                 total
             })
+        });
+
+
+        app.get('/order-stats', verifyToken, verifyAdmin, async (req, res) => {
+            const result = await paymentsCollection.aggregate([
+                {
+                    $unwind: "$itemIds"
+                },
+                {
+                    $lookup: {
+                        from: 'menus',
+                        localField: 'itemIds',
+                        foreignField: '_id',
+                        as: 'menuItems'
+                    }
+                },
+                {
+                    $unwind: "$menuItems"
+                },
+                {
+                    $group: {
+                        _id: '$menuItems.category',
+                        quantity: { $sum: 1 },
+                        revenue: { $sum: '$menuItems.price' }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        category: "$_id",
+                        quantity: "$quantity",
+                        revenue: '$revenue'
+                    }
+                }
+            ]).toArray();
+            res.send(result)
         })
+
 
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
