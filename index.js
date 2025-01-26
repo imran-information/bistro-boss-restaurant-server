@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const stripe = require('stripe')('sk_test_51QfP2KQTZ65dHD6JNijXUm4DkrdfZ5wRqUIIzYt2qy6W6FhGDh5HhnsHzXb7hEEVeNRFz7Ied8sATtIOcP9bNtH800oGODJKOx')
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+const qs = require('qs');
+const { default: axios } = require('axios');
 const port = process.env.PORT || 5000;
 
 // middleware 
@@ -237,6 +239,61 @@ async function run() {
             const query = { email: email }
             const result = await paymentsCollection.find(query).toArray()
             res.send(result)
+        })
+        // generate SSL Payment 
+        app.post('/ssl-payment', async (req, res) => {
+            const tranId = new ObjectId().toString()
+            const paymentInfo = req.body;
+            // console.log(paymentInfo);
+            const paymentInitiate = {
+                store_id: 'bistr67961999ab597',
+                store_passwd: 'bistr67961999ab597@ssl',
+                total_amount: paymentInfo.price,
+                currency: 'BDT',
+                tran_id: tranId, // use unique tran_id for each api call
+                success_url: 'http://localhost:5000/success-payment',
+                fail_url: 'http://localhost:5173/fail',
+                cancel_url: 'http://localhost:5173/cancel',
+                ipn_url: 'http://localhost:5000/ipn-success-payment',
+                shipping_method: 'Courier',
+                product_name: 'Computer.',
+                product_category: 'Electronic',
+                product_profile: 'general',
+                cus_name: 'Customer Name',
+                cus_email: `${paymentInfo.email}`,
+                cus_add1: 'Dhaka',
+                cus_add2: 'Dhaka',
+                cus_city: 'Dhaka',
+                cus_state: 'Dhaka',
+                cus_postcode: '1000',
+                cus_country: 'Bangladesh',
+                cus_phone: '01711111111',
+                cus_fax: '01711111111',
+                ship_name: 'Customer Name',
+                ship_add1: 'Dhaka',
+                ship_add2: 'Dhaka',
+                ship_city: 'Dhaka',
+                ship_state: 'Dhaka',
+                ship_postcode: 1000,
+                ship_country: 'Bangladesh',
+            }
+
+            const initiateResponse = await axios({
+                url: 'https://sandbox.sslcommerz.com/gwprocess/v4/api.php',
+                method: "POST",
+                data: paymentInitiate,
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                }
+
+
+            });
+
+            // console.log("Response Data:", initiateResponse.data.redirectGatewayURL);
+            const gatewayUrl = initiateResponse.data.redirectGatewayURL
+            res.send(gatewayUrl)
+
+
         })
 
 
