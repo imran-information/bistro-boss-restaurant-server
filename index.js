@@ -5,14 +5,13 @@ const jwt = require('jsonwebtoken');
 const stripe = require('stripe')('sk_test_51QfP2KQTZ65dHD6JNijXUm4DkrdfZ5wRqUIIzYt2qy6W6FhGDh5HhnsHzXb7hEEVeNRFz7Ied8sATtIOcP9bNtH800oGODJKOx')
 require('dotenv').config()
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
-const qs = require('qs');
 const { default: axios } = require('axios');
 const port = process.env.PORT || 5000;
 
 // middleware 
 app.use(cors())
 app.use(express.json())
-
+app.use(express.urlencoded())
 
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.eedxn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
@@ -169,18 +168,11 @@ async function run() {
             res.send(result)
         })
 
-
-
-
-
         // review related apis 
         app.get('/reviews', async (req, res) => {
             const result = await reviewsCollection.find().toArray()
             res.send(result)
         })
-
-
-
 
 
         // add to the cart 
@@ -244,6 +236,9 @@ async function run() {
         app.post('/ssl-payment', async (req, res) => {
             const tranId = new ObjectId().toString()
             const paymentInfo = req.body;
+            paymentInfo.transactionId = tranId
+            const savePaymentInfo = await paymentsCollection.insertOne(paymentInfo)
+            // console.log(savePaymentInfo);
             // console.log(paymentInfo);
             const paymentInitiate = {
                 store_id: 'bistr67961999ab597',
@@ -285,13 +280,41 @@ async function run() {
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 }
-
-
             });
+
 
             // console.log("Response Data:", initiateResponse.data.redirectGatewayURL);
             const gatewayUrl = initiateResponse.data.redirectGatewayURL
-            res.send(gatewayUrl)
+            res.send({ gatewayUrl })
+
+
+        })
+
+        app.post('/success-payment', async (req, res) => {
+            // console.log(req.body);
+            if (req.body.status === 'VALID') {
+                const data = await axios.get(`https://sandbox.sslcommerz.com/validator/api/validationserverAPI.php?val_id=${req.body.val_id}&store_id=bistr67961999ab597&store_passwd=bistr67961999ab597@ssl`)
+                console.log(data.status);
+                if (!data.status) {
+                    return res.send({ message: "Invited Payment Status" })
+                }
+                const updatePaymentDoc = await paymentsCollection.updateOne({ transactionId: req.body.tran_id }, {
+                    $set: {
+                        status: "Success"
+                    }
+                })
+
+                const paymentInfo = await paymentsCollection.findOne({ transactionId: req.body.tran_id })
+                // console.log(paymentInfo);
+                const query = {
+                    _id: {
+                        $in: paymentInfo.cartIds.map((id) => new ObjectId(id))
+                    }
+                }
+                const result = await cartsCollection.deleteMany(query);
+
+                res.redirect('http://localhost:5173/dashboard/payment-history')
+            }
 
 
         })
